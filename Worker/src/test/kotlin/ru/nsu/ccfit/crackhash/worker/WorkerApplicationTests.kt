@@ -1,10 +1,10 @@
-package ru.nsu.ccfit.manager
+package ru.nsu.ccfit.crackhash.worker
 
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
 
 @SpringBootTest
-class ManagerApplicationTests {
+class WorkerApplicationTests {
 
     @Test
     fun contextLoads() {

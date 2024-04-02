@@ -1,0 +1,4 @@
+workers:
+  base_url: http://localhost:8081
+  count: 4
+  timeout: 2

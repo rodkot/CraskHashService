@@ -1,4 +1,4 @@
-package ru.nsu.ccfit.worker
+package ru.nsu.ccfit.crackhash.worker
 
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
