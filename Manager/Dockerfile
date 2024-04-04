@@ -38,7 +38,7 @@ FROM eclipse-temurin:21-jdk-alpine
 ARG BUILD_HOME
 ENV APP_HOME=$BUILD_HOME
 WORKDIR /opt/app
-COPY --from=build-image $APP_HOME/build/libs/*.jar app.jar
+COPY --from=build-image $APP_HOME/build/libs/manager-0.0.1.jar app.jar
 
 #
 # The command to run when the container starts.

@@ -16,7 +16,7 @@ import ru.nsu.ccfit.crackhash.manager.scheduler.TimeoutScheduler
 @Service
 @EnableScheduling
 class TaskCheckerSchedulerImpl(
-    @Value("\${workers.count}")
+    @Value("\${part.count}")
     private val partCount: Int,
     private val logger: Logger,
     private val subTaskRepository: SubTaskRepository,

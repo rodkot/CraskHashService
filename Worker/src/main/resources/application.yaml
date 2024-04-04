@@ -1,7 +1,3 @@
 manager:
-  url: "http://localhost:8080"
-  timeout: 1
-
-
-server:
-  port: 8081
+  url: ${MANAGER_URL}
+  timeout: ${TIMEOUT}

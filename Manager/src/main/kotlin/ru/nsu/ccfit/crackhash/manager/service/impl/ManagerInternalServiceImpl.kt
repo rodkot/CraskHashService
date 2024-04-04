@@ -14,7 +14,7 @@ import ru.nsu.ccfit.crackhash.manager.service.ManagerInternalService
 
 @Service
 class ManagerInternalServiceImpl(
-    @Value("\${workers.count}")
+    @Value("\${part.count}")
     private val partCount: Int,
     private val logger: Logger,
     private val taskRepository: TaskRepository,
