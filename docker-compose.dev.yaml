@@ -1,10 +1,9 @@
 version: '3.9'
 
 services:
-  manager:
-    container_name: manager
+  crackhash-manager:
     env_file:
-      - docker.env
+      - dev.env
     build: ./Manager/
     depends_on:
       rabbitmq:
@@ -14,37 +13,12 @@ services:
     networks:
       - crackhash
     ports:
-      - '8080:8080'
+      - '10010:80'
     restart: on-failure
 
-  worker-1:
-    container_name: worker-1
+  crackhash-worker-1:
     env_file:
-      - docker.env
-    build: ./Worker/
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - crackhash
-    restart: on-failure
-
-  worker-2:
-    container_name: worker-2
-    env_file:
-      - docker.env
-    build: ./Worker/
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - crackhash
-    restart: on-failure
-
-  worker-3:
-    container_name: worker-3
-    env_file:
-      - docker.env
+      - dev.env
     build: ./Worker/
     depends_on:
       rabbitmq:
@@ -54,11 +28,11 @@ services:
     restart: on-failure
 
   rabbitmq:
-    container_name: rabbitmq
     image: 'rabbitmq:3.13.0-management-alpine'
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBIT_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBIT_PASS}
+      RABBITMQ_DEFAULT_VHOST: ${RABBIT_VHOST}
     healthcheck:
       test: rabbitmq-diagnostics -q ping
       interval: 30s
@@ -72,53 +46,49 @@ services:
       - '15672:15672'
 
   mongo1:
-    image: mongo:latest
     container_name: mongo1
-    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
+    image: mongo:7.0.7-rc2
+    volumes:
+      - ~/mongors/data1:/data/db
+      - ./rs-init.sh:/scripts/rs-init.sh
+    networks:
+      - crackhash
+    links:
+      - mongo2
+      - mongo3
+    restart: always
+    ports:
+      - '27017:27017'
+    command: [ "mongod", "--bind_ip_all", "--replSet", "dbrs"]
     healthcheck:
       test: echo "try { rs.status() } catch (err) { rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo1:27017',priority:1},{_id:1,host:'mongo2:27018',priority:0.5},{_id:2,host:'mongo3:27019',priority:0.5}]}) }" | mongosh --port 27017 --quiet
       interval: 5s
       timeout: 20s
       retries: 20
-    ports:
-      - "27017:27017"
-    volumes:
-      - "mongo1_data:/data/db"
-      - "mongo1_config:/data/configdb"
-    networks:
-      - crackhash
 
   mongo2:
-    image: mongo:latest
     container_name: mongo2
-    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27018"]
-    ports:
-      - "27018:27018"
+    image: mongo:7.0.7-rc2
     volumes:
-      - "mongo2_data:/data/db"
-      - "mongo2_config:/data/configdb"
+      - ~/mongors/data2:/data/db
     networks:
       - crackhash
+    restart: always
+    ports:
+      - '27018:27017'
+    command: [ "mongod", "--bind_ip_all", "--replSet", "dbrs" ]
 
   mongo3:
-    image: mongo:latest
     container_name: mongo3
-    command: [ "--replSet", "rs0", "--bind_ip_all", "--port", "27019" ]
-    ports:
-      - "27019:27019"
+    image: mongo:7.0.7-rc2
     volumes:
-      - "mongo3_data:/data/db"
-      - "mongo3_config:/data/configdb"
+      - ~/mongors/data3:/data/db
     networks:
       - crackhash
-
-volumes:
-  mongo1_data:
-  mongo1_config:
-  mongo2_data:
-  mongo2_config:
-  mongo3_data:
-  mongo3_config:
+    restart: always
+    ports:
+      - '27019:27017'
+    command: [ "mongod", "--bind_ip_all", "--replSet", "dbrs" ]
 
 networks:
   crackhash:

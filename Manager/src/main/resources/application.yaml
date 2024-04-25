@@ -1,5 +1,18 @@
 workers:
   base_url: ${WORKER_URL}
-  timeout: ${TIMEOUT}
+subtask:
+  timeout: ${SUBTASK_TIMEOUT}
 part:
   count: ${PART_COUNT}
+
+spring:
+  rabbitmq:
+    host: ${RABBIT_HOST}
+    port: 5672
+    username: ${RABBIT_USER}
+    password: ${RABBIT_PASS}
+
+  data:
+    mongodb:
+      database: ${MONGO_DATABASE}
+      uri: ${MONGO_URL}

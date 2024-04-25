@@ -1,51 +1,65 @@
 package ru.nsu.ccfit.crackhash.worker.service.impl
 
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.future.asCompletableFuture
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import org.paukov.combinatorics3.Generator
 import org.slf4j.Logger
+import org.springframework.amqp.AmqpException
+import org.springframework.amqp.rabbit.core.RabbitTemplate
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.util.DigestUtils
-import ru.nsu.ccfit.crackhash.worker.manager.ManagerApi
 import ru.nsu.ccfit.crackhash.worker.model.dto.WorkerResponseDto
 import ru.nsu.ccfit.crackhash.worker.model.enity.WorkerTask
 import ru.nsu.ccfit.crackhash.worker.service.TaskExecutorService
-import java.util.concurrent.TimeUnit
+import kotlin.time.DurationUnit
+import kotlin.time.toDuration
 
 @Service
 class TaskExecutorServiceImpl(
     private val logger: Logger,
-    @Value("\${manager.timeout}")
+    @Value("\${subtask.timeout}")
     private val timeOut: Long,
-    private val manager: ManagerApi,
+    private val manager: RabbitTemplate,
 ) : TaskExecutorService {
     val taskExecutorScope = CoroutineScope(Dispatchers.Default)
-    override fun takeNewTask(workerTask: WorkerTask) {
-        taskExecutorScope.launch {
-            val loggerBase = workerTask.run { "Task [$partNumber|$partCount]#$hash" }
+    override fun takeNewTask(workerTask: WorkerTask): Unit = runBlocking {
+        val loggerBase = workerTask.run { "Task [$partNumber|$partCount]#$hash" }
 
-            val res = async { executeTask(workerTask, loggerBase) }.asCompletableFuture()
-                .completeOnTimeout(null, 1, TimeUnit.MINUTES)
-                .orTimeout(timeOut, TimeUnit.MINUTES)
-                .get()
+        logger.info("$loggerBase: Started")
 
-            manager.sendTaskResult(
-                WorkerResponseDto(
-                    workerTask.partNumber,
-                    workerTask.hash,
-                    res
-                )
+        withTimeoutOrNull(timeOut.toDuration(DurationUnit.MINUTES)) {
+            executeTask(workerTask, loggerBase) { ensureActive() }
+        }.let { result ->
+            WorkerResponseDto(
+                workerTask.partNumber,
+                workerTask.hash,
+                result
             )
+        }.let { workerResponse ->
+            try {
+                manager.convertAndSend(
+                    "worker-to-manager",
+                    "manager",
+                    workerResponse
+                )
+
+                val taskResultState = if (workerResponse.value == null) "TIMEOUT" else "SUCCESS"
+                logger.info("$loggerBase: Finished $taskResultState.")
+            } catch (e: AmqpException) {
+                logger.error("$loggerBase: Exception ${e.message}")
+            }
         }
     }
 
-    private fun executeTask(workerTask: WorkerTask, loggerBase: String): List<String> {
+    private fun executeTask(
+        workerTask: WorkerTask,
+        loggerBase: String,
+        cancellationDispatch: () -> Unit,
+    ): List<String> {
+        workerTask.apply { logger.info("$loggerBase started") }
         return (1..workerTask.maxLength).flatMap {
-            crackForFixedLength(it, workerTask, loggerBase)
+            workerTask.apply { logger.info("$loggerBase running $it/${workerTask.maxLength} symbols") }
+            crackForFixedLength(it, workerTask, loggerBase, cancellationDispatch)
         }
     }
 
@@ -53,6 +67,7 @@ class TaskExecutorServiceImpl(
         length: Int,
         workerTask: WorkerTask,
         loggerBase: String,
+        cancellationDispatch: () -> Unit
     ): List<String> {
         var counter = -1
 
@@ -60,9 +75,13 @@ class TaskExecutorServiceImpl(
             ('0'..'9') + ('a'..'z')
         ).withRepetitions(length)
             .stream()
+            .peek { cancellationDispatch() }
             .skip(workerTask.partNumber.toLong())
+            .peek { cancellationDispatch() }
             .filter { (++counter) % workerTask.partCount == 0 }
+            .peek { cancellationDispatch() }
             .filter { hash(String(it.toCharArray())) == workerTask.hash }
+            .peek { cancellationDispatch() }
             .map { String(it.toCharArray()) }
             .peek { workerTask.apply { logger.info("$loggerBase found '$it'") } }
             .distinct()
